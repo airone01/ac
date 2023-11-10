@@ -37,11 +37,12 @@ fn main() {
         Err(e) => panic!("Can't open repository: {}", e),
     };
 
-    if let Some(_) = matches.subcommand_matches("c") {
-        commit(repo);
-    } else {
-        commit(repo);
-        println!("ADD");
+    match matches.subcommand_matches("c") {
+        Some(_) => commit(repo),
+        _ => {
+            commit(repo);
+            println!("ADD");
+        }
     }
 }
 
@@ -59,14 +60,17 @@ fn commit(repo: git2::Repository) {
     let message: String = format_message(prompts());
     let signature: git2::Signature<'_> = repo.signature().unwrap();
 
-    repo.commit(
+    match repo.commit(
         Some("HEAD"),
         &signature,
         &signature,
         message.as_str(),
         &tree,
         &[&head_commit],
-    );
+    ) {
+        Ok(_) => println!("Commit successful"),
+        Err(e) => println!("{}", e),
+    }
 }
 
 const CHANGE_TYPES: &[ChangeType] = &[
