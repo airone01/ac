@@ -1,5 +1,3 @@
-use std::io::Error;
-
 struct ChangeType {
     slug: &'static str,
     desc: &'static str,
@@ -37,28 +35,21 @@ fn _main() -> AppResult {
 
     let matches = cmd.get_matches();
 
-    let cwd: std::path::PathBuf = match std::env::current_dir() {
-        Ok(cwd) => cwd,
-        Err(err) => return Err(Box::new(err) as Box<dyn std::error::Error>),
-    };
+    let cwd: std::path::PathBuf = std::env::current_dir()?;
     let dir: std::path::PathBuf = if let Some(dir) = matches.get_one::<std::path::PathBuf>("dir") {
         cwd.join(dir)
     } else {
         cwd
     };
 
-    let repo: git2::Repository = match git2::Repository::open(dir) {
-        Ok(repo) => {
-            println!("Repository found: {:?}", repo.path());
-            repo
-        }
-        Err(e) => panic!("Can't open repository: {}", e),
-    };
+    let repo: git2::Repository = git2::Repository::open(dir)?;
 
     match matches.subcommand_matches("c") {
-        Some(_) => commit(repo),
+        Some(_) => {
+            commit(repo)?;
+        }
         _ => {
-            commit(repo);
+            commit(repo)?;
             println!("ADD");
         }
     }
@@ -69,15 +60,12 @@ fn _main() -> AppResult {
 /// Construct a commit message from user input and repository
 fn commit(repo: git2::Repository) -> AppResult {
     // Get the HEAD reference
-    let head: git2::Reference<'_> = match repo.head() {
-        Ok(head) => head,
-        Err(err) => return Err(Box::new(err) as Box<dyn std::error::Error>),
-    };
+    let head: git2::Reference<'_> = repo.head()?;
 
     let target = match head.target() {
         Some(target) => target,
         None => {
-            return Err(Box::new(Error::new(
+            return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "Can't find HEAD of the repo",
             )) as Box<dyn std::error::Error>)
@@ -85,34 +73,23 @@ fn commit(repo: git2::Repository) -> AppResult {
     };
 
     // Resolve the reference to a commit
-    let head_commit: git2::Commit<'_> = match repo.find_commit(target) {
-        Ok(head_commit) => head_commit,
-        Err(err) => return Err(Box::new(err) as Box<dyn std::error::Error>),
-    };
+    let head_commit: git2::Commit<'_> = repo.find_commit(target)?;
 
     // Get the tree of the commit
-    let tree: git2::Tree<'_> = match head_commit.tree() {
-        Ok(tree) => tree,
-        Err(err) => return Err(Box::new(err) as Box<dyn std::error::Error>),
-    };
+    let tree: git2::Tree<'_> = head_commit.tree()?;
 
-    let message: String = format_message(prompts());
-    let signature: git2::Signature<'_> = match repo.signature() {
-        Ok(signature) => signature,
-        Err(err) => return Err(Box::new(err) as Box<dyn std::error::Error>),
-    };
+    let prompts = prompts()?;
+    let message: String = format_message(prompts);
+    let signature: git2::Signature<'_> = repo.signature()?;
 
-    match repo.commit(
+    repo.commit(
         Some("HEAD"),
         &signature,
         &signature,
         message.as_str(),
         &tree,
         &[&head_commit],
-    ) {
-        Ok(_) => println!("Commit successful"),
-        Err(e) => println!("{}", e),
-    }
+    )?;
 
     Ok(())
 }
@@ -185,33 +162,25 @@ struct Prompts {
 
 fn prompts() -> PromptsResult {
     let change_type: String =
-        match inquire::Select::new("Type of change?", flat_change_types()).prompt() {
-            Ok(signature) => signature,
-            Err(err) => return Err(Box::new(err) as Box<dyn std::error::Error>),
-        };
+        inquire::Select::new("Type of change?", flat_change_types()).prompt()?;
     let change_scope: Option<String> = inquire::Text::new("Scope? (class, file name, etc)")
         .with_help_message("skip with ENTER")
         .with_placeholder("index.tsx")
-        .prompt_skippable()
-        .unwrap();
+        .prompt_skippable()?;
     let change_summary: String = inquire::Text::new("Summary?")
         .with_help_message("lowercase, no period")
-        .prompt()
-        .unwrap();
+        .prompt()?;
     let change_body: Option<String> = inquire::Text::new("Body?")
         .with_help_message("additional info. skip with ENTER")
         .with_placeholder("Lorem ipsum.")
-        .prompt_skippable()
-        .unwrap();
+        .prompt_skippable()?;
     let change_breaking: bool = inquire::Confirm::new("Breaking change?")
         .with_default(false)
-        .prompt()
-        .unwrap();
+        .prompt()?;
     let change_footer: Option<String> = inquire::Text::new("Footer?")
         .with_help_message("BC info and references. skip with ENTER")
         .with_placeholder("Closes #1337.")
-        .prompt_skippable()
-        .unwrap();
+        .prompt_skippable()?;
 
     Ok(Prompts {
         ttype: change_type,
