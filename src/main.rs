@@ -16,8 +16,8 @@ fn main() {
 type AppResult = Result<(), Box<dyn std::error::Error>>;
 type PromptsResult = Result<Prompts, Box<dyn std::error::Error>>;
 
-fn _main() -> AppResult {
-    let cmd = clap::Command::new("ac")
+fn build_cli() -> clap::Command {
+    clap::Command::new("ac")
         .disable_help_subcommand(true)
         .subcommand_negates_reqs(true)
         .bin_name("ac")
@@ -30,10 +30,20 @@ fn _main() -> AppResult {
                 .value_parser(clap::builder::PathBufValueParser::new())
                 .help("Directory to the repo"),
         )
+        // modes
         .subcommand(clap::Command::new("c").about("Commit only"))
-        .subcommand(clap::Command::new("ac").about("Add and commit (default behavior)"));
+        .subcommand(clap::Command::new("ac").about("Add and commit (default behavior)"))
+        .subcommand(
+            clap::Command::new("completion")
+                .about("Generate completion scripts")
+                .arg(
+                    clap::Arg::new("shell").value_parser(clap::value_parser!(clap_complete::Shell)),
+                ),
+        )
+}
 
-    let matches = cmd.get_matches();
+fn _main() -> AppResult {
+    let matches = build_cli().get_matches();
 
     let cwd: std::path::PathBuf = std::env::current_dir()?;
     let dir: std::path::PathBuf = if let Some(dir) = matches.get_one::<std::path::PathBuf>("dir") {
@@ -44,13 +54,31 @@ fn _main() -> AppResult {
 
     let repo: git2::Repository = git2::Repository::open(dir)?;
 
-    match matches.subcommand_matches("c") {
-        Some(_) => {
+    match matches.subcommand() {
+        // shell completion
+        Some(("completion", sub_matches)) => {
+            if let Some(generator) = sub_matches
+                .get_one::<clap_complete::Shell>("shell")
+                .copied()
+            {
+                let cmd = build_cli();
+                eprintln!("Generating completion script for {generator}...");
+                clap_complete::generate(
+                    generator,
+                    &mut cmd.clone(),
+                    cmd.get_name().to_string(),
+                    &mut std::io::stdout(),
+                );
+            }
+        }
+        // commit
+        Some(("c", _)) => {
             commit(repo)?;
         }
-        _ => {
+        // add and commit
+        Some((_, _)) | None => {
+            todo!("Add current folder to git index");
             commit(repo)?;
-            println!("ADD");
         }
     }
 
