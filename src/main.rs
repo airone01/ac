@@ -25,17 +25,20 @@ fn build_cli() -> clap::Command {
                 .value_hint(clap::ValueHint::DirPath)
                 .value_name("DIR")
                 .value_parser(clap::builder::PathBufValueParser::new())
-                .help("Directory to the repo"),
+                .help("Directory of the repo."),
         )
         // modes
-        .subcommand(clap::Command::new("c").about("Commit only"))
-        .subcommand(clap::Command::new("ac").about("Add and commit (default behavior)"))
+        .subcommand(clap::Command::new("c").about("Commit only."))
+        .subcommand(clap::Command::new("ac").about("Add and commit (default behavior)."))
         // completion
         .subcommand(
             clap::Command::new("completion")
                 .about("Generate completion scripts")
                 .arg(
-                    clap::Arg::new("shell").value_parser(clap::value_parser!(clap_complete::Shell)),
+                    clap::Arg::new("shell")
+                        .value_parser(clap::value_parser!(clap_complete::Shell))
+                        .required(true)
+                        .help("Shell to generate completion script for."),
                 ),
         )
 }
