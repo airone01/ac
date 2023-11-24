@@ -13,9 +13,6 @@ fn main() {
     }
 }
 
-type AppResult = Result<(), Box<dyn std::error::Error>>;
-type PromptsResult = Result<Prompts, Box<dyn std::error::Error>>;
-
 fn build_cli() -> clap::Command {
     clap::Command::new("ac")
         .disable_help_subcommand(true)
@@ -33,6 +30,7 @@ fn build_cli() -> clap::Command {
         // modes
         .subcommand(clap::Command::new("c").about("Commit only"))
         .subcommand(clap::Command::new("ac").about("Add and commit (default behavior)"))
+        // completion
         .subcommand(
             clap::Command::new("completion")
                 .about("Generate completion scripts")
@@ -42,7 +40,7 @@ fn build_cli() -> clap::Command {
         )
 }
 
-fn _main() -> AppResult {
+fn _main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = build_cli().get_matches();
 
     let cwd: std::path::PathBuf = std::env::current_dir()?;
@@ -71,13 +69,17 @@ fn _main() -> AppResult {
                 );
             }
         }
+        // add
+        Some(("a", _)) => {
+            add(&repo)?;
+        }
         // commit
         Some(("c", _)) => {
             commit(repo)?;
         }
         // add and commit
         Some((_, _)) | None => {
-            todo!("Add current folder to git index");
+            add(&repo)?;
             commit(repo)?;
         }
     }
@@ -85,38 +87,32 @@ fn _main() -> AppResult {
     Ok(())
 }
 
-/// Construct a commit message from user input and repository
-fn commit(repo: git2::Repository) -> AppResult {
-    // Get the HEAD reference
-    let head: git2::Reference<'_> = repo.head()?;
+// Add current folder to git index
+fn add(repo: &git2::Repository) -> Result<(), Box<dyn std::error::Error>> {
+    let mut index: git2::Index = repo.index()?;
 
-    let target = match head.target() {
-        Some(target) => target,
-        None => {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Can't find HEAD of the repo",
-            )) as Box<dyn std::error::Error>)
-        }
-    };
+    index.add_all(["."].iter(), git2::IndexAddOption::DEFAULT, None)?;
+    index.write()?;
 
-    // Resolve the reference to a commit
-    let head_commit: git2::Commit<'_> = repo.find_commit(target)?;
+    Ok(())
+}
 
-    // Get the tree of the commit
-    let tree: git2::Tree<'_> = head_commit.tree()?;
-
+// Construct a commit message from user input and repository
+fn commit(repo: git2::Repository) -> Result<(), Box<dyn std::error::Error>> {
     let prompts = prompts()?;
-    let message: String = format_message(prompts);
     let signature: git2::Signature<'_> = repo.signature()?;
 
+    let mut index = repo.index()?;
+    let oid = index.write_tree()?;
+    let parent_commit = repo.head()?.peel_to_commit()?;
+    let tree = repo.find_tree(oid)?;
     repo.commit(
         Some("HEAD"),
         &signature,
         &signature,
-        message.as_str(),
+        &make_commit_message(prompts),
         &tree,
-        &[&head_commit],
+        &[&parent_commit],
     )?;
 
     Ok(())
@@ -188,7 +184,7 @@ struct Prompts {
     footer: Option<String>,
 }
 
-fn prompts() -> PromptsResult {
+fn prompts() -> Result<Prompts, Box<dyn std::error::Error>> {
     let change_type: String =
         inquire::Select::new("Type of change?", flat_change_types()).prompt()?;
     let change_scope: Option<String> = inquire::Text::new("Scope? (class, file name, etc)")
@@ -220,7 +216,7 @@ fn prompts() -> PromptsResult {
     })
 }
 
-fn format_message(p: Prompts) -> String {
+fn make_commit_message(p: Prompts) -> String {
     let mut message: String = p.ttype[0..p.ttype.find(":").unwrap()].to_string();
     if p.breaking {
         message = format!("{}!", message);
