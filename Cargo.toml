@@ -2,6 +2,12 @@
 name = "ac"
 version = "0.1.0"
 edition = "2021"
+description = "A simple CLI for quickly making standardized commits."
+readme = "README.md"
+license-file = "LICENSE"
+homepage = "https://github.com/AirOne01/ac"
+repository = "https://github.com/AirOne01/ac"
+
 
 [dependencies]
 clap = { version = "4.4.7", features = ["cargo"] }
