@@ -1,5 +1,5 @@
 [package]
-name = "ac"
+name = "git-ac"
 version = "0.1.0"
 edition = "2021"
 description = "A simple CLI for quickly making standardized commits."
